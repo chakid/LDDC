@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 from typing import Any
 
-from PySide6.QtCore import QEvent, QModelIndex, QObject, QPersistentModelIndex, Qt, Signal, Slot
+from PySide6.QtCore import QEvent, QModelIndex, QObject, QPersistentModelIndex, QSize, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QColor, QCursor, QDropEvent, QHelpEvent, QMouseEvent, QPainter, QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QListWidget,
     QListWidgetItem,
+    QStyle,
+    QStyleOptionViewItem,
     QStyledItemDelegate,
     QTableWidget,
     QTableWidgetItem,
@@ -26,11 +28,20 @@ class HeaderViewResizeMode:
     ResizeToContents = 2
 
 
+class RowSelectionDelegate(QStyledItemDelegate):
+    """Keep row selection visible without a separate focused-cell border."""
+
+    def initStyleOption(self, option: QStyleOptionViewItem, index: QModelIndex) -> None:
+        super().initStyleOption(option, index)
+        option.state &= ~QStyle.StateFlag.State_HasFocus
+
+
 class LyricOrderListWidget(QListWidget):
     droped = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setProperty("role", "order")
 
     def dropEvent(self, event: QDropEvent) -> None:
         super().dropEvent(event)
@@ -158,6 +169,7 @@ class CheckBoxListWidget(QListWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setProperty("role", "checks")
         self.setDragEnabled(True)
         self.setDragDropMode(QListWidget.DragDropMode.InternalMove)
         self.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
@@ -190,8 +202,24 @@ class CheckBoxListWidget(QListWidget):
                 if data in Source.__members__:
                     check_box.setText(str(Source[data]))
 
+        item.setSizeHint(QSize(check_box.sizeHint().width() + 12, 36))
         self.addItem(item)
         self.setItemWidget(item, check_box)
+        self.update_item_sizes()
+
+    def update_item_sizes(self) -> None:
+        for index in range(self.count()):
+            item = self.item(index)
+            checkbox = self.itemWidget(item)
+            if isinstance(checkbox, QCheckBox):
+                checkbox.ensurePolished()
+                hint = checkbox.sizeHint()
+                item.setSizeHint(QSize(hint.width() + 20, max(36, hint.height() + 4)))
+
+    def changeEvent(self, event: QEvent) -> None:
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.StyleChange, QEvent.Type.FontChange):
+            QTimer.singleShot(0, self.update_item_sizes)
 
     def set_langs(self, langs: list[str], order: list[str]) -> None:
         self.list_type = "lang"

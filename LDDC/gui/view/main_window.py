@@ -4,13 +4,15 @@
 """LDDC的主窗口"""
 
 from PySide6.QtCore import Qt, Slot
-from PySide6.QtGui import QCloseEvent, QIcon, QShowEvent
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtGui import QCloseEvent, QCursor, QIcon, QShowEvent
+from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton, QTableWidget
 
 from LDDC.common.models import Direction
 from LDDC.common.translator import language_changed
 from LDDC.gui.components.msg_box import MsgBox
+from LDDC.gui.components.page_layouts import refine_batch_convert, refine_local_match, refine_settings
 from LDDC.gui.components.sidebar_window import SidebarWindow
+from LDDC.gui.components.theme import apply_theme, primary_button
 from LDDC.gui.exit_manager import exit_manager
 
 from .about import AboutWidget
@@ -30,16 +32,29 @@ class MainWindow(SidebarWindow):
 
     def showEvent(self, event: QShowEvent) -> None:
         # 直到要显示时才初始化
-        if not self.is_inited:
+        first_show = not self.is_inited
+        if first_show:
             self.init()
-        return super().showEvent(event)
+        super().showEvent(event)
+        if first_show:
+            self.center_on_screen()
+
+    def center_on_screen(self) -> None:
+        screen = QApplication.screenAt(QCursor.pos()) or self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            return
+        # Include the native title bar and borders, and exclude taskbars/docks.
+        frame = self.frameGeometry()
+        frame.moveCenter(screen.availableGeometry().center())
+        self.move(frame.topLeft())
 
     def init(self) -> None:
         """初始化主窗口"""
         self.setWindowTitle("LDDC")
-        self.resize(1060, 600)
+        self.resize(1180, 780)
+        self.setMinimumSize(1000, 680)
         self.setWindowIcon(QIcon(":/LDDC/img/icon/logo.png"))
-        self.set_sidebar_width(100)
+        self.set_sidebar_width(164)
 
         self.search_widget = SearchWidget()
         self.local_match_widget = LocalMatchWidget()
@@ -49,8 +64,30 @@ class MainWindow(SidebarWindow):
         self.batch_convert_widget = BatchConvertWidget()
 
         self.init_widgets()
+        self.setup_appearance()
         self.connect_signals()
         self.is_inited = True
+
+    def setup_appearance(self) -> None:
+        refine_local_match(self.local_match_widget)
+        refine_batch_convert(self.batch_convert_widget)
+        refine_settings(self.settings_widget)
+        for page in (self.local_match_widget, self.open_lyrics_widget, self.batch_convert_widget,
+                     self.settings_widget, self.about_widget):
+            if page.layout():
+                page.layout().setContentsMargins(24, 24, 24, 24)
+                page.layout().setSpacing(14)
+        for button in (self.local_match_widget.start_cancel_pushButton,
+                       self.batch_convert_widget.start_button, self.open_lyrics_widget.open_pushButton):
+            primary_button(button)
+        for button in self.findChildren(QPushButton):
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+        for table in self.findChildren(QTableWidget):
+            table.setAlternatingRowColors(True)
+            table.verticalHeader().setDefaultSectionSize(40)
+            table.horizontalHeader().setHighlightSections(False)
+        apply_theme(self)
+        QApplication.styleHints().colorSchemeChanged.connect(lambda _: apply_theme(self))
 
     def init_widgets(self) -> None:
         self.add_widget(self.tr("搜索"), self.search_widget)
@@ -84,12 +121,18 @@ class MainWindow(SidebarWindow):
 
     def connect_signals(self) -> None:
         self.widget_changed.connect(self.settings_widget.update_cache_size)  # 更新缓存大小
+        self.settings_widget.settings_applied.connect(self.on_settings_applied)
         language_changed.connect(self.retranslateUi)
 
         self.local_match_widget.search_song.connect(self.search_widget.auto_fetch)
         self.local_match_widget.search_song.connect(lambda: self.set_current_widget(0))
         self.batch_convert_widget.open_lyrics.connect(self.open_lyrics_widget.open_file)
         self.batch_convert_widget.open_lyrics.connect(lambda: self.set_current_widget(2))
+
+    @Slot(dict)
+    def on_settings_applied(self, changes: dict) -> None:
+        if "default_save_path" in changes:
+            self.search_widget.save_path_lineEdit.setText(changes["default_save_path"])
 
     @Slot()
     def retranslateUi(self) -> None:

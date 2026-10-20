@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (C) 2024-2025 沉默の金 <cmzj@cmzj.org>
 # SPDX-License-Identifier: GPL-3.0-only
-from PySide6.QtCore import QEvent, Qt, Signal, Slot
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -38,11 +38,13 @@ class SidebarWindow(QMainWindow):
         self.horizontalLayout.setSpacing(0)
 
         self.sidebar_widget = QWidget(self)
+        self.sidebar_widget.setObjectName("sidebar")
         self.sidebar = QVBoxLayout(self.sidebar_widget)
         self.Widgets = QTabWidget(self)
         self.horizontalLayout.addWidget(self.sidebar_widget)
         self.horizontalLayout.addWidget(self.Widgets)
-        self.sidebar.setContentsMargins(0, 10, 0, 10)
+        self.sidebar.setContentsMargins(12, 24, 12, 20)
+        self.sidebar.setSpacing(8)
         self.Widgets.tabBar().hide()
 
         self.__sidebar_spacer = QSpacerItem(40, 20, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
@@ -79,6 +81,8 @@ class SidebarWindow(QMainWindow):
         :return: None
         """
         button = QPushButton(name, self.sidebar_widget)
+        button.setProperty("role", "nav")
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         if isinstance(icon, QIcon):
             button.setIcon(icon)
@@ -87,19 +91,6 @@ class SidebarWindow(QMainWindow):
             button.setChecked(True)
         button.setProperty("index", self.Total_Widgets)
         button.clicked.connect(self.SidebarButtonClicked)
-        button.setStyleSheet(
-            """
-            QPushButton {
-                border: none;
-                padding: 5px;
-                font-size: 16px;
-                border-radius: 10px;
-            }
-            QPushButton:checked {
-                background-color: #d9d9d9;
-            }
-            """,
-        )
         if position == Direction.TOP:
             self.sidebar.insertWidget(self.Top_Widgets, button)
             self.Top_Widgets += 1
@@ -110,32 +101,13 @@ class SidebarWindow(QMainWindow):
         self.Widgets.addTab(widget, "")
         self.Total_Widgets += 1
 
-    def changeEvent(self, event: QEvent) -> None:
-        if event.type() == QEvent.Type.StyleChange:
-            for i in range(self.Total_Widgets):
-                item = self.sidebar.itemAt(i).widget()
-                if isinstance(item, QPushButton):
-                    item.setStyleSheet(
-                        """
-                        QPushButton {
-                            border: none;
-                            padding: 5px;
-                            font-size: 16px;
-                            border-radius: 10px;
-                        }
-                        QPushButton:checked {
-                            background-color: #d9d9d9;
-                        }
-                        """,
-                    )
-        return super().changeEvent(event)
-
     def clear_widgets(self) -> None:
         """清空所有页面"""
         self.Widgets.clear()
         while self.sidebar.count():
             item = self.sidebar.takeAt(0)
             if item.widget():
+                item.widget().hide()
                 item.widget().deleteLater()
         self.sidebar.addItem(self.__sidebar_spacer)
         self.Total_Widgets = 0

@@ -8,6 +8,7 @@
 """
 
 import json
+from copy import deepcopy
 from threading import Lock
 from typing import Any
 
@@ -70,6 +71,7 @@ class Config(dict):
 
             "language": "auto",
             "color_scheme": "auto",
+            "ui_font_size": 10,
             "log_level": "INFO",
             "auto_check_update": True,
         }
@@ -105,6 +107,26 @@ class Config(dict):
     def setitem(self, key: Any, value: Any) -> None:
         self[key] = value
 
+    def apply_settings(self, values: dict[str, Any]) -> None:
+        """Persist a complete settings batch before notifying any live consumers."""
+        with self.lock:
+            changes = {key: deepcopy(value) for key, value in values.items() if self.get(key) != value}
+            if not changes:
+                return
+            updated = dict(self)
+            updated.update(changes)
+            temporary = self.config_path.with_suffix(".json.tmp")
+            try:
+                with temporary.open("w", encoding="utf-8") as output:
+                    json.dump(updated, output, ensure_ascii=False, indent=4)
+                temporary.replace(self.config_path)
+            finally:
+                temporary.unlink(missing_ok=True)
+            # Bypass __setitem__: one disk write, then signals see the whole new configuration.
+            dict.update(self, changes)
+        for key, value in changes.items():
+            self._emit_change(key, value)
+
     def __getitem__(self, key: Any) -> Any:
         if self.lock is None:
             return super().__getitem__(key)
@@ -119,6 +141,9 @@ class Config(dict):
             super().__setitem__(key, value)
             self.write_config()
 
+        self._emit_change(key, value)
+
+    def _emit_change(self, key: Any, value: Any) -> None:
         if key in ("langs_order", "lrc_ms_digit_count", "add_end_timestamp_line", "last_ref_line_time_sty", "lrc_tag_info_src"):
             self.lyrics_changed.emit((key, value))
         elif key in (

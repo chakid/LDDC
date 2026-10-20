@@ -17,6 +17,7 @@ if find_spec("LDDC") is None:
 from LDDC.common.args import args
 from LDDC.common.translator import load_translation
 from LDDC.common.version import __version__
+from LDDC.gui.components.typography import ui_font
 from LDDC.gui.exit_manager import exit_manager
 from LDDC.gui.service import LDDCService
 from LDDC.res import resource_rc
@@ -25,6 +26,7 @@ resource_rc.qInitResources()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    app.setFont(ui_font())
     if args.get_service_port:
         # 如果是获取服务端口,则只需实例化LDDCService(会获取并打印另一个LDDC进程服务端口),然后退出
         LDDCService()

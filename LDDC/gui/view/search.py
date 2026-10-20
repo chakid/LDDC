@@ -4,9 +4,9 @@ import os
 from pathlib import Path
 from typing import Literal
 
-from PySide6.QtCore import QModelIndex, QSize, Qt, QTimer, Slot
-from PySide6.QtGui import QDragEnterEvent, QDropEvent, QFont
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSizePolicy, QTableWidgetItem, QWidget
+from PySide6.QtCore import QModelIndex, Qt, QTimer, Slot
+from PySide6.QtGui import QDragEnterEvent, QDropEvent
+from PySide6.QtWidgets import QFileDialog, QFrame, QHBoxLayout, QLabel, QLayout, QLineEdit, QPushButton, QSizePolicy, QTableWidgetItem, QVBoxLayout, QWidget
 
 from LDDC.common.data.config import cfg
 from LDDC.common.models import (
@@ -31,6 +31,8 @@ from LDDC.core.api.translate import translate_lyrics
 from LDDC.core.auto_fetch import auto_fetch
 from LDDC.core.song_info import AUDIO_FORMATS, parse_drop_infos, write_lyrics
 from LDDC.gui.components.msg_box import MsgBox
+from LDDC.gui.components.search_layout import refine_search_layout
+from LDDC.gui.components.theme import primary_button
 from LDDC.gui.ui.search_base_ui import Ui_search_base
 from LDDC.gui.view.get_list_lyrics import GetListLyrics
 
@@ -39,6 +41,7 @@ class SearchWidgetBase(QWidget, Ui_search_base):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setupUi(self)
+        refine_search_layout(self)
 
         self._init_task_manager()
         self._connect_signals()
@@ -479,6 +482,10 @@ class SearchWidgetBase(QWidget, Ui_search_base):
     def retranslateUi(self, _search_base: "SearchWidgetBase | None" = None) -> None:
         self.update_search_types()
         super().retranslateUi(self)
+        self.search_keyword_lineEdit.setPlaceholderText(self.tr("输入歌名、歌手、专辑或歌单"))
+        self.preview_plainTextEdit.setPlaceholderText(self.tr("双击搜索结果，在这里预览歌词。"))
+        self.lyric_langs_lineEdit.setPlaceholderText("—")
+        self.songid_lineEdit.setPlaceholderText("—")
 
 
 class SearchWidget(SearchWidgetBase):
@@ -498,50 +505,72 @@ class SearchWidget(SearchWidgetBase):
         self.task_manager.parent_childs["get_lyrics"].append("auto_fetch")
 
     def setup_ui(self) -> None:
-        # 设置标题
-        title_font = QFont()
-        title_font.setPointSize(18)
+        # Keep layout changes here, outside the generated .ui Python file.
         self.label_title = QLabel(self)
         self.label_sub_title = QLabel(self)
-        self.label_title.setFont(title_font)
+        self.label_title.setProperty("role", "title")
+        self.label_sub_title.setProperty("role", "subtitle")
+        heading = QVBoxLayout()
+        heading.setSpacing(4)
+        heading.addWidget(self.label_title)
+        heading.addWidget(self.label_sub_title)
+        self.verticalLayout.insertLayout(0, heading)
 
-        self.verticalLayout.insertWidget(0, self.label_title)
-        self.verticalLayout.insertWidget(1, self.label_sub_title)
+        # Replace the tall, side-by-side action area with three full-width rows.
+        self.verticalLayout.removeItem(self.bottom_horizontalLayout)
 
-        # 设置选择保存路径
+        def detach_items(layout: QLayout) -> None:
+            while layout.count():
+                item = layout.takeAt(0)
+                if item.layout():
+                    detach_items(item.layout())
+
+        detach_items(self.bottom_horizontalLayout)
+        self.output_panel = QFrame(self)
+        self.output_panel.setProperty("role", "card")
+        output_layout = QVBoxLayout(self.output_panel)
+        output_layout.setContentsMargins(16, 14, 16, 14)
+        output_layout.setSpacing(12)
+
         self.select_path_lhorizontalLayout = QHBoxLayout()
+        self.select_path_lhorizontalLayout.setSpacing(10)
         self.select_path_label = QLabel(self)
+        self.select_path_label.setProperty("role", "muted")
         self.save_path_lineEdit = QLineEdit(self)
         self.save_path_lineEdit.setText(cfg["default_save_path"])
         self.select_path_pushButton = QPushButton(self)
-
         self.select_path_lhorizontalLayout.addWidget(self.select_path_label)
-        self.select_path_lhorizontalLayout.addWidget(self.save_path_lineEdit)
+        self.select_path_lhorizontalLayout.addWidget(self.save_path_lineEdit, 1)
         self.select_path_lhorizontalLayout.addWidget(self.select_path_pushButton)
-        self.control_verticalLayout.insertLayout(0, self.select_path_lhorizontalLayout)
+        output_layout.addLayout(self.select_path_lhorizontalLayout)
 
-        # 设置保存按钮
+        options = QHBoxLayout()
+        options.setSpacing(12)
+        for checkbox in (self.original_checkBox, self.translate_checkBox, self.romanized_checkBox):
+            checkbox.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+            options.addWidget(checkbox)
+        options.addStretch(1)
+        options.addWidget(self.label_5)
+        self.offset_spinBox.setSuffix(" ms")
+        self.offset_spinBox.setMinimumWidth(126)
+        options.addWidget(self.offset_spinBox)
+        options.addWidget(self.label_9)
+        self.lyricsformat_comboBox.setMinimumWidth(140)
+        options.addWidget(self.lyricsformat_comboBox)
+        output_layout.addLayout(options)
+
+        self.bottom_horizontalLayout.setSpacing(10)
         self.save_preview_lyric_pushButton = QPushButton(self)
         self.save_list_lyrics_pushButton = QPushButton(self)
         self.save_to_tag_pushButton = QPushButton(self)
-        save_button_size_policy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        save_button_size_policy.setHorizontalStretch(0)
-        save_button_size_policy.setVerticalStretch(0)
-        save_button_size_policy.setHeightForWidth(self.save_preview_lyric_pushButton.sizePolicy().hasHeightForWidth())
-        self.save_preview_lyric_pushButton.setSizePolicy(save_button_size_policy)
-        self.save_to_tag_pushButton.setSizePolicy(save_button_size_policy)
-        self.save_list_lyrics_pushButton.setSizePolicy(save_button_size_policy)
-
-        but_h = self.control_verticalLayout.sizeHint().height() - self.control_verticalSpacer.sizeHint().height() * 0.8
-
-        self.save_preview_lyric_pushButton.setMinimumSize(QSize(0, int(but_h)))
-        self.save_to_tag_pushButton.setMinimumSize(QSize(0, int(but_h)))
-        self.save_list_lyrics_pushButton.setMinimumSize(QSize(0, int(but_h)))
-
+        primary_button(self.save_preview_lyric_pushButton)
+        self.bottom_horizontalLayout.addWidget(self.translate_pushButton)
+        self.bottom_horizontalLayout.addStretch(1)
         self.bottom_horizontalLayout.addWidget(self.save_list_lyrics_pushButton)
-        self.bottom_horizontalLayout.addWidget(self.save_preview_lyric_pushButton)
         self.bottom_horizontalLayout.addWidget(self.save_to_tag_pushButton)
-
+        self.bottom_horizontalLayout.addWidget(self.save_preview_lyric_pushButton)
+        output_layout.addLayout(self.bottom_horizontalLayout)
+        self.verticalLayout.addWidget(self.output_panel)
         self.retranslateUi()
 
     def retranslateUi(self, search_base: SearchWidgetBase | None = None) -> None:
