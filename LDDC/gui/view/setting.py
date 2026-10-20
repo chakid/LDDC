@@ -39,6 +39,13 @@ class SettingWidget(QWidget, Ui_settings):
         self.ui_font_size_label.setBuddy(self.ui_font_size_comboBox)
         self.gridLayout_3.addWidget(self.ui_font_size_label, 4, 0)
         self.gridLayout_3.addWidget(self.ui_font_size_comboBox, 4, 1)
+        self.local_match_concurrency_label = QLabel(self.groupBox_2)
+        self.local_match_concurrency_spinBox = QSpinBox(self.groupBox_2)
+        self.local_match_concurrency_spinBox.setObjectName("local_match_concurrency_spinBox")
+        self.local_match_concurrency_spinBox.setRange(1, 20)
+        self.local_match_concurrency_label.setBuddy(self.local_match_concurrency_spinBox)
+        self.gridLayout.addWidget(self.local_match_concurrency_label, 6, 1)
+        self.gridLayout.addWidget(self.local_match_concurrency_spinBox, 6, 2, 1, 3)
         for combo in self.findChildren(QComboBox):
             combo.installEventFilter(self)
         self.apply_status_label = QLabel(self)
@@ -65,6 +72,7 @@ class SettingWidget(QWidget, Ui_settings):
         if hasattr(self, "apply_button"):
             self.apply_button.setText(self.tr("应用"))
             self.ui_font_size_label.setText(self.tr("界面字号:"))
+            self.local_match_concurrency_label.setText(self.tr("最多同时下载歌词数量:"))
             self.update_dirty()
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
@@ -86,6 +94,9 @@ class SettingWidget(QWidget, Ui_settings):
         self.default_save_path_lineEdit.setText(data["default_save_path"])
         self.id3_ver_comboBox.setCurrentText(data["ID3_version"])
 
+        self.local_match_concurrency_label.setText(self.tr("最多同时下载歌词数量:"))
+        self.local_match_concurrency_spinBox.setToolTip(self.tr("本地匹配时同时处理的歌曲数量（1–20），点击应用后对新任务生效。"))
+        self.local_match_concurrency_spinBox.setValue(data["local_match_concurrency"])
         # 歌词设置
         self.lyrics_order_buttons.set_order(data["langs_order"])
         self.skip_inst_lyrics_checkBox.setChecked(data["skip_inst_lyrics"])
@@ -179,6 +190,7 @@ class SettingWidget(QWidget, Ui_settings):
             "langs_order": self.lyrics_order_buttons.get_order(),
             "skip_inst_lyrics": self.skip_inst_lyrics_checkBox.isChecked(),
             "auto_select": self.auto_select_checkBox.isChecked(),
+            "local_match_concurrency": self.local_match_concurrency_spinBox.value(),
             "add_end_timestamp_line": self.add_end_timestamp_line_checkBox.isChecked(),
             "lrc_ms_digit_count": self.lrc_ms_digit_count_spinBox.value(),
             "last_ref_line_time_sty": self.last_ref_line_time_sty_comboBox.currentIndex(),

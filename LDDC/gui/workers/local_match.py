@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 from dataclasses import dataclass
 from enum import Enum
+from functools import partial
 from pathlib import Path
+from queue import Queue
 from threading import Lock
 from typing import ClassVar
 
@@ -10,6 +12,7 @@ from mutagen import MutagenError  # type: ignore[reportPrivateImportUsage]
 from PySide6.QtCore import (
     QCoreApplication,
     QMimeData,
+    QThreadPool,
 )
 
 from LDDC.common.data.config import cfg
@@ -224,6 +227,8 @@ class LocalMatchWorker(TaskWorker):
 
         self.skip_inst_lyrics = cfg["skip_inst_lyrics"]
         self.file_name_format = cfg["lyrics_file_name_fmt"]
+        self.concurrency = max(1, min(20, int(cfg["local_match_concurrency"])))
+        self.save_lock = Lock()
 
     def check_skip_existing_lyrics(self, info: SongInfo, song_root_path: Path | None) -> bool:
         song_file_has_lyrics = has_lyrics(info.path) if info.path else False
@@ -245,29 +250,29 @@ class LocalMatchWorker(TaskWorker):
             return True
         return bool(self.save2tag_mode == LocalMatchSave2TagMode.BOTH and (song_file_has_lyrics or lyrics_file_exists))
 
-    def run_task(self) -> None:
-        total = len(self.infos_root_paths)
-        success_count, skip_count = 0, 0
-        status: LocalMatchingStatus | None = None
-        for i, (info, song_root_path) in enumerate(self.infos_root_paths):
-            if self.is_stopped:
-                break
-
-            self.progress.emit(f"正在匹配 {info.artist_title(replace=True)} 的歌词...", i, total, status)
-
-            if self.skip_existing_lyrics and self.check_skip_existing_lyrics(info, song_root_path):
+    def match_song(self, i: int, info: SongInfo, song_root_path: Path | None) -> LocalMatchingStatus | None:
+        if self.is_stopped:
+            return None
+        try:
+            with self.save_lock:
+                skip_existing = self.skip_existing_lyrics and self.check_skip_existing_lyrics(info, song_root_path)
+            if skip_existing:
                 status = LocalMatchingStatus(LocalMatchingStatusType.SKIP_EXISTING, i, QCoreApplication.translate("LocalMatch", "跳过已存在的歌词"))
-                skip_count += 1
-                continue
+                return status
 
-            try:
-                lyrics = auto_fetch(info=info, min_score=self.min_score, sources=self.sources)
+            if self.is_stopped:
+                return None
+            lyrics = auto_fetch(info=info, min_score=self.min_score, sources=self.sources)
+            if self.is_stopped:
+                return None
 
-                if self.skip_inst_lyrics and lyrics.is_inst():
-                    status = LocalMatchingStatus(LocalMatchingStatusType.SKIP_INST, i, QCoreApplication.translate("LocalMatch", "跳过纯音乐"))
-                    skip_count += 1
-                    continue
+            if self.skip_inst_lyrics and lyrics.is_inst():
+                status = LocalMatchingStatus(LocalMatchingStatusType.SKIP_INST, i, QCoreApplication.translate("LocalMatch", "跳过纯音乐"))
+                return status
 
+            with self.save_lock:
+                if self.is_stopped:
+                    return None
                 lyrics_text = lyrics.to(lyrics_format=self.lyrics_format, langs=self.langs)
 
                 save_path = None
@@ -286,7 +291,7 @@ class LocalMatchWorker(TaskWorker):
                     if isinstance(save_path, int):
                         status = LocalMatchingStatus(LocalMatchingStatusType.SAVE_FAIL, i, QCoreApplication.translate("LocalMatch", "计算歌词保存路径失败"))
                         logger.error("计算歌词保存路径失败: %s ,错误码: %s", info.artist_title(replace=True), save_path)
-                        continue
+                        return status
                     save_path.parent.mkdir(parents=True, exist_ok=True)
                     with save_path.open("w", encoding="utf-8") as f:
                         f.write(lyrics_text)
@@ -298,28 +303,64 @@ class LocalMatchWorker(TaskWorker):
                             i,
                             QCoreApplication.translate("LocalMatch", "没有获取到{}的歌曲路径,无法保存到标签").format(info.artist_title(replace=True)),
                         )
-                        continue
+                        return status
                     write_lyrics(info.path, lyrics_text, lyrics)
 
-                status = LocalMatchingStatus(LocalMatchingStatusType.SUCCESS, i, QCoreApplication.translate("LocalMatch", "成功"), save_path)
-                success_count += 1
-            except MutagenError:
-                status = LocalMatchingStatus(LocalMatchingStatusType.SAVE_FAIL, i, QCoreApplication.translate("LocalMatch", "保存到标签失败"))
-            except TimeoutError:
-                status = LocalMatchingStatus(LocalMatchingStatusType.AUTO_FETCH_FAIL, i, QCoreApplication.translate("LocalMatch", "匹配超时"))
-            except LyricsNotFoundError:
-                status = LocalMatchingStatus(LocalMatchingStatusType.AUTO_FETCH_FAIL, i, QCoreApplication.translate("LocalMatch", "没有匹配到歌词"))
-            except (OSError, FileExistsError, FileNotFoundError):
-                status = LocalMatchingStatus(LocalMatchingStatusType.SAVE_FAIL, i, QCoreApplication.translate("LocalMatch", "保存失败"))
-            except Exception as e:
-                logger.exception("本地匹配歌词时发生错误未知: %s", info.artist_title(replace=True))
-                status = LocalMatchingStatus(
-                    LocalMatchingStatusType.UNDERKNOWN_ERROR,
-                    i,
-                    QCoreApplication.translate("LocalMatch", "未知错误 {}".format(f"{e.__class__.__name__}: {e!s}")),
-                )
+            status = LocalMatchingStatus(LocalMatchingStatusType.SUCCESS, i, QCoreApplication.translate("LocalMatch", "成功"), save_path)
+        except MutagenError:
+            status = LocalMatchingStatus(LocalMatchingStatusType.SAVE_FAIL, i, QCoreApplication.translate("LocalMatch", "保存到标签失败"))
+        except TimeoutError:
+            status = LocalMatchingStatus(LocalMatchingStatusType.AUTO_FETCH_FAIL, i, QCoreApplication.translate("LocalMatch", "匹配超时"))
+        except LyricsNotFoundError:
+            status = LocalMatchingStatus(LocalMatchingStatusType.AUTO_FETCH_FAIL, i, QCoreApplication.translate("LocalMatch", "没有匹配到歌词"))
+        except (OSError, FileExistsError, FileNotFoundError):
+            status = LocalMatchingStatus(LocalMatchingStatusType.SAVE_FAIL, i, QCoreApplication.translate("LocalMatch", "保存失败"))
+        except Exception as e:
+            logger.exception("本地匹配歌词时发生错误未知: %s", info.artist_title(replace=True))
+            status = LocalMatchingStatus(
+                LocalMatchingStatusType.UNDERKNOWN_ERROR,
+                i,
+                QCoreApplication.translate("LocalMatch", "未知错误 {}".format(f"{e.__class__.__name__}: {e!s}")),
+            )
+        return status
 
-        # time.sleep(random.randint(500, 1000))
+    def run_task(self) -> None:
+        total = len(self.infos_root_paths)
+        success_count = skip_count = completed = 0
+        results: Queue[LocalMatchingStatus | None] = Queue()
+        # auto_fetch uses the shared network pool and a Qt event loop. Use a
+        # separate Qt pool so waiting song tasks cannot exhaust the network pool.
+        pool = QThreadPool()
+        pool.setMaxThreadCount(self.concurrency)
+        next_index = 0
+        pending = 0
+        self.progress.emit(QCoreApplication.translate("LocalMatch", "正在匹配歌词..."), 0, total, None)
 
-        self.progress.emit("", 0, 0, status)
-        self.finished.emit(total, success_count, total - success_count - skip_count, skip_count)
+        def match(i: int) -> None:
+            info, root = self.infos_root_paths[i]
+            results.put(self.match_song(i, info, root))
+
+        try:
+            while pending or (next_index < total and not self.is_stopped):
+                while pending < self.concurrency and next_index < total and not self.is_stopped:
+                    pool.start(partial(match, next_index))
+                    next_index += 1
+                    pending += 1
+                if not pending:
+                    break
+                status = results.get()
+                pending -= 1
+                if status is None:
+                    continue
+                completed += 1
+                if status.status == LocalMatchingStatusType.SUCCESS:
+                    success_count += 1
+                elif status.status in (LocalMatchingStatusType.SKIP_EXISTING, LocalMatchingStatusType.SKIP_INST):
+                    skip_count += 1
+                info = self.infos_root_paths[status.index][0]
+                self.progress.emit(f"已处理 {info.artist_title(replace=True)} 的歌词", completed, total, status)
+        finally:
+            pool.waitForDone()
+
+        self.progress.emit("", 0, 0, None)
+        self.finished.emit(completed, success_count, completed - success_count - skip_count, skip_count)

@@ -48,6 +48,7 @@ class Config(dict):
             "langs_order": ["roma", "orig", "ts"],
             "skip_inst_lyrics": True,
             "auto_select": True,
+            "local_match_concurrency": 5,
             "add_end_timestamp_line": False,
             "lrc_ms_digit_count": 3,
             "last_ref_line_time_sty": 0,  # 0: 与当前原文起始时间相同 1: 与下一行原文起始时间接近

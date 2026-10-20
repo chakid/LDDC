@@ -66,6 +66,10 @@ settings.lyrics_order_buttons.buttons["roma"].click()
 assert settings.lyrics_order_buttons.get_order() == ["orig", "ts", "roma"]
 settings.skip_inst_lyrics_checkBox.setChecked(False)
 settings.auto_select_checkBox.setChecked(False)
+assert settings.local_match_concurrency_spinBox.minimum() == 1
+assert settings.local_match_concurrency_spinBox.maximum() == 20
+assert settings.local_match_concurrency_spinBox.value() == 5
+settings.local_match_concurrency_spinBox.setValue(20)
 settings.add_end_timestamp_line_checkBox.setChecked(True)
 settings.lrc_ms_digit_count_spinBox.setValue(2)
 settings.last_ref_line_time_sty_comboBox.setCurrentIndex(1)
@@ -112,6 +116,7 @@ assert all(cfg[key] == value for key, value in draft.items())
 saved = json.loads(cfg.config_path.read_text(encoding="utf-8"))
 assert saved == json.loads(json.dumps(dict(cfg)))
 assert Config()["ui_font_size"] == 12
+assert Config()["local_match_concurrency"] == 20
 assert "#151c29" in window.styleSheet()
 assert window.search_widget.search_keyword_lineEdit.font().pointSizeF() == 12
 assert cfg["translate_target_lang"] == "JAPANESE"
