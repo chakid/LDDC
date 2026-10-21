@@ -12,6 +12,7 @@ from LDDC.common.models import LyricsFormat
 from LDDC.common.paths import default_save_lyrics_dir
 from LDDC.common.task_manager import TaskManager
 from LDDC.gui.components.msg_box import MsgBox
+from LDDC.gui.components.page_options import PageOptions
 from LDDC.gui.ui.batch_convert_ui import Ui_batch_convert
 from LDDC.gui.workers.batch_convert import BatchConvertWorker, ConverStatus, ConverStatusType
 
@@ -36,6 +37,7 @@ class BatchConvertWidget(QWidget, Ui_batch_convert):
 
         self.taskmanager = TaskManager({"batch_convert": []}, {"batch_convert": restore})
         self.save_root_path: Optional[Path] = None  # 保存根目录
+        self.page_options = PageOptions(self, "batch_convert", ("format_comboBox", "recursive_checkBox"), ("save_root_path",))
 
     def connect_signals(self) -> None:
         """连接信号与槽"""
@@ -126,6 +128,7 @@ class BatchConvertWidget(QWidget, Ui_batch_convert):
         dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
         dialog.setNameFilter(self.tr("歌词文件 (*.lrc *.txt *.srt *.ass)"))
         dialog.filesSelected.connect(lambda files: self.add_to_table([Path(f) for f in files]))
+        self.page_options.remember_dialog(dialog, "input_files")
         dialog.open()
 
     @Slot()
@@ -150,6 +153,7 @@ class BatchConvertWidget(QWidget, Ui_batch_convert):
                 MsgBox.information(self, self.tr("提示"), self.tr("所选文件夹中没有找到支持的歌词文件"))
 
         dialog.fileSelected.connect(handle_dir_selected)
+        self.page_options.remember_dialog(dialog, "input_directory")
         dialog.open()
 
     @Slot()
@@ -158,11 +162,12 @@ class BatchConvertWidget(QWidget, Ui_batch_convert):
         dialog = QFileDialog(self)
         dialog.setWindowTitle(self.tr("选择保存目录"))
         dialog.setFileMode(QFileDialog.FileMode.Directory)
-        dialog.setDirectory(str(default_save_lyrics_dir))
+        dialog.setDirectory(str(self.save_root_path or default_save_lyrics_dir))
 
         @Slot(str)
         def set_save_root_path(path: str) -> None:
             self.save_root_path = Path(path).resolve()
+            self.page_options.save()
             self.update_save_paths()
 
         dialog.fileSelected.connect(set_save_root_path)

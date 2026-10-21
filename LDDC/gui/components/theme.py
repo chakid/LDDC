@@ -9,24 +9,31 @@ from PySide6.QtGui import QFontInfo, QFontMetrics, QGuiApplication
 from PySide6.QtWidgets import QPushButton, QWidget
 
 from LDDC.common.data.config import cfg
+from LDDC.gui.components.navigation_icons import navigation_icon
 from LDDC.gui.components.typography import ui_font, ui_font_size
+
+
+def theme_colors() -> dict[str, str]:
+    """Return the shared palette for the configured application color scheme."""
+    scheme = cfg.get("color_scheme", "auto")
+    dark = scheme == "dark" or (scheme == "auto" and QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark)
+    return (
+        dict(bg="#151c29", panel="#1e293b", sidebar="#192233", text="#e5edf8", muted="#9aaec8",
+             border="#36455d", hover="#2b3a52", accent="#80b4ff", primary="#2563eb", pressed="#1d4ed8",
+             selected="#293f61", nav_selected="#2563eb", disabled="#233047", disabled_text="#74859e", input="#192335")
+        if dark else
+        dict(bg="#f4f7fc", panel="#ffffff", sidebar="#eaf0f8", text="#20304a", muted="#64748b",
+             border="#d9e2ef", hover="#eef4fd", accent="#2563eb", primary="#2563eb", pressed="#1d4ed8",
+             selected="#dceafe", nav_selected="#2563eb", disabled="#f0f3f8", disabled_text="#98a5b8", input="#ffffff")
+    )
+
 
 def apply_theme(window: QWidget) -> None:
     window.setFont(ui_font())
     settings_title_font = ui_font()
     settings_title_font.setPixelSize(QFontInfo(settings_title_font).pixelSize() + 2)
     settings_title_height = QFontMetrics(settings_title_font).height()
-    scheme = cfg.get("color_scheme", "auto")
-    dark = scheme == "dark" or (scheme == "auto" and QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark)
-    colors = (
-        dict(bg="#151c29", panel="#1e293b", sidebar="#192233", text="#e5edf8", muted="#9aaec8",
-             border="#36455d", hover="#2b3a52", accent="#80b4ff", primary="#2563eb", pressed="#1d4ed8",
-             selected="#293f61", disabled="#233047", disabled_text="#74859e", input="#192335")
-        if dark else
-        dict(bg="#f4f7fc", panel="#ffffff", sidebar="#eaf0f8", text="#20304a", muted="#64748b",
-             border="#d9e2ef", hover="#eef4fd", accent="#2563eb", primary="#2563eb", pressed="#1d4ed8",
-             selected="#dceafe", disabled="#f0f3f8", disabled_text="#98a5b8", input="#ffffff")
-    )
+    colors = theme_colors()
     assets = (Path(__file__).parent / "assets").as_posix()
     # Scope to this window: transparent desktop lyrics keep their own painting and palette.
     window.setStyleSheet("""
@@ -58,13 +65,17 @@ def apply_theme(window: QWidget) -> None:
         }
         QPushButton[role="nav"] {
             background: transparent; color: %(muted)s; border: 1px solid transparent;
-            text-align: left; padding: 10px 16px; min-height: 22px; font-size: %(font_size)spt;
+            border-radius: 6px; text-align: left; padding: 8px 10px; min-height: 20px;
+            font-size: %(font_size)spt;
         }
-        QPushButton[role="nav"]:hover { background: %(hover)s; color: %(text)s; }
+        QPushButton[role="nav"]:hover {
+            background: %(hover)s; color: %(text)s; border-color: transparent;
+        }
         QPushButton[role="nav"]:checked {
-            background: %(selected)s; color: %(accent)s; font-weight: 600;
+            background: %(nav_selected)s; color: white; border-color: transparent;
         }
-        QPushButton[role="nav"]:focus { border-color: %(accent)s; }
+        QPushButton[role="nav"]:pressed { background: %(nav_selected)s; color: white; border-color: transparent; }
+        QPushButton[role="nav"]:focus { border-color: %(border)s; }
         QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
             background: %(input)s; border: 1px solid %(border)s; border-radius: 7px;
             padding: 6px 10px; min-height: 20px; selection-background-color: %(primary)s;
@@ -113,6 +124,10 @@ def apply_theme(window: QWidget) -> None:
             border-radius: 8px; selection-background-color: %(selected)s; selection-color: %(text)s;
         }
         QPlainTextEdit, QTextEdit { padding: 12px; }
+        QWidget#localMatchResultsFrame {
+            background: %(panel)s; border: 1px solid %(border)s; border-radius: 8px;
+        }
+        QWidget#localMatchResultsFrame QTableWidget#songs_table { border: none; border-radius: 0; }
         QTableWidget::item, QListWidget::item { padding: 7px 8px; border: none; }
         QListWidget[role="checks"]::item { padding: 0px; }
         QListWidget#source_listWidget, QListWidget#multi_search_source_list { padding-left: 4px; }
@@ -133,7 +148,17 @@ def apply_theme(window: QWidget) -> None:
             background: %(bg)s; color: %(muted)s; padding: 9px 8px; border: none;
             border-bottom: 1px solid %(border)s; font-weight: 500;
         }
+        QHeaderView#localMatchRowHeader { background: %(panel)s; }
+        QHeaderView#localMatchRowHeader::section {
+            background: %(panel)s; padding: 0 8px; border: none; font-weight: normal;
+        }
+        QHeaderView#localMatchRowHeader::section:checked {
+            background: %(selected)s; color: %(accent)s;
+        }
         QTableCornerButton::section { background: %(bg)s; border: none; }
+        QTableWidget#songs_table QTableCornerButton::section {
+            border-bottom: 1px solid %(border)s;
+        }
         QSplitter::handle { background: transparent; }
         QSplitter::handle:hover { background: %(border)s; border-radius: 3px; }
         QGroupBox { background: %(panel)s; border: 1px solid %(border)s; border-radius: 9px; margin-top: 16px; padding: 16px 12px 12px; }
@@ -153,6 +178,7 @@ def apply_theme(window: QWidget) -> None:
         QScrollBar::add-line, QScrollBar::sub-line { width: 0px; height: 0px; }
         QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
         QProgressBar { border: none; border-radius: 5px; background: %(disabled)s; text-align: center; min-height: 10px; }
+        QProgressBar[complete="true"] { color: white; }
         QProgressBar::chunk { background: %(primary)s; border-radius: 5px; }
         QMenu { background: %(panel)s; border: 1px solid %(border)s; padding: 5px; }
         QMenu::item { padding: 7px 22px; border-radius: 4px; }
@@ -160,6 +186,17 @@ def apply_theme(window: QWidget) -> None:
         QToolTip { color: %(text)s; background: %(panel)s; border: 1px solid %(border)s; padding: 6px; }
     """ % {**colors, "assets": assets, "font_size": ui_font_size(),
            "settings_title_size": settings_title_font.pixelSize(), "settings_title_margin": settings_title_height + 2})
+    sidebar = window.findChild(QWidget, "sidebar")
+    if sidebar is not None:
+        buttons = [button for button in sidebar.findChildren(QPushButton) if button.property("role") == "nav"]
+        for button in buttons:
+            if name := button.property("navIcon"):
+                button.setIcon(navigation_icon(name, colors["muted"], "#ffffff", colors["disabled_text"]))
+            button.ensurePolished()
+        # Keep the compact width unless a larger font or translation needs more room.
+        margins = sidebar.layout().contentsMargins()
+        content_width = max((button.sizeHint().width() for button in buttons), default=0)
+        sidebar.setFixedWidth(max(sidebar.property("preferredWidth") or 140, content_width + margins.left() + margins.right()))
 
 
 def primary_button(button: QPushButton) -> None:

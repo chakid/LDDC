@@ -83,7 +83,6 @@ class QMAPI(CloudAPI):
         }
         self.inited = False
         self.init_lock = Lock()
-        self.init()
 
     def init(self) -> None:
         with self.init_lock:
@@ -97,6 +96,7 @@ class QMAPI(CloudAPI):
                 "sid": data["session"]["sid"],
                 "userip": data["session"]["userip"],
             }
+            self.inited = True
 
     def request(self, method: str, module: str, param: dict) -> dict:
         """请求API

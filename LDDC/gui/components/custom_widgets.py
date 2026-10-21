@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 from typing import Any
 
-from PySide6.QtCore import QEvent, QModelIndex, QObject, QPersistentModelIndex, QSize, Qt, QTimer, Signal, Slot
-from PySide6.QtGui import QColor, QCursor, QDropEvent, QHelpEvent, QMouseEvent, QPainter, QResizeEvent
+from PySide6.QtCore import QEvent, QModelIndex, QObject, QPersistentModelIndex, QRectF, QSize, Qt, QTimer, Signal, Slot
+from PySide6.QtGui import QColor, QCursor, QDropEvent, QHelpEvent, QMouseEvent, QPainter, QPainterPath, QRegion, QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QToolTip,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -26,6 +27,27 @@ from LDDC.common.translator import language_changed
 
 class HeaderViewResizeMode:
     ResizeToContents = 2
+
+
+class RoundedTableContainer(QWidget):
+    """Keep table children inside the rounded frame's inner edge."""
+
+    def __init__(self, table: QTableWidget) -> None:
+        super().__init__(table.parentWidget())
+        self.setObjectName("localMatchResultsFrame")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(1, 1, 1, 1)
+        layout.setSpacing(0)
+        layout.addWidget(table)
+        table.installEventFilter(self)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if isinstance(watched, QTableWidget) and event.type() == QEvent.Type.Resize:
+            path = QPainterPath()
+            path.addRoundedRect(QRectF(watched.rect()), 7, 7)
+            watched.setMask(QRegion(path.toFillPolygon().toPolygon()))
+        return super().eventFilter(watched, event)
 
 
 class RowSelectionDelegate(QStyledItemDelegate):
@@ -72,7 +94,12 @@ class ProportionallyStretchedTableWidget(QTableWidget):
         for i, prop in enumerate(self.props):
             if prop == HeaderViewResizeMode.ResizeToContents:
                 self.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
-                width -= self.columnWidth(i)
+                if i == self.columnCount() - 1 and self.horizontalHeader().stretchLastSection():
+                    # The stretched width includes spare space, not just the content.
+                    # Subtracting it would shrink every proportional column on resize.
+                    width -= max(self.horizontalHeader().sectionSizeHint(i), self.sizeHintForColumn(i))
+                else:
+                    width -= self.columnWidth(i)
         for i in range(self.columnCount()):
             if 0 <= self.props[i] <= 1:
                 self.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
