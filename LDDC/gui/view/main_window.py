@@ -54,7 +54,7 @@ class MainWindow(SidebarWindow):
         self.resize(1180, 780)
         self.setMinimumSize(1000, 680)
         self.setWindowIcon(QIcon(":/LDDC/img/icon/logo.png"))
-        self.set_sidebar_width(164)
+        self.set_sidebar_width(140)
 
         self.search_widget = SearchWidget()
         self.local_match_widget = LocalMatchWidget()
@@ -78,7 +78,7 @@ class MainWindow(SidebarWindow):
                 page.layout().setContentsMargins(24, 24, 24, 24)
                 page.layout().setSpacing(14)
         for button in (self.local_match_widget.start_cancel_pushButton,
-                       self.batch_convert_widget.start_button, self.open_lyrics_widget.open_pushButton):
+                       self.batch_convert_widget.start_button):
             primary_button(button)
         for button in self.findChildren(QPushButton):
             button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -90,12 +90,12 @@ class MainWindow(SidebarWindow):
         QApplication.styleHints().colorSchemeChanged.connect(lambda _: apply_theme(self))
 
     def init_widgets(self) -> None:
-        self.add_widget(self.tr("搜索"), self.search_widget)
-        self.add_widget(self.tr("本地匹配"), self.local_match_widget)
-        self.add_widget(self.tr("打开歌词"), self.open_lyrics_widget)
-        self.add_widget(self.tr("批量转换"), self.batch_convert_widget)
-        self.add_widget(self.tr("关于"), self.about_widget, Direction.BOTTOM)
-        self.add_widget(self.tr("设置"), self.settings_widget, Direction.BOTTOM)
+        self.add_widget(self.tr("搜索"), self.search_widget, icon_name="search")
+        self.add_widget(self.tr("本地匹配"), self.local_match_widget, icon_name="match")
+        self.add_widget(self.tr("打开歌词"), self.open_lyrics_widget, icon_name="open")
+        self.add_widget(self.tr("批量转换"), self.batch_convert_widget, icon_name="convert")
+        self.add_widget(self.tr("关于"), self.about_widget, Direction.BOTTOM, icon_name="about")
+        self.add_widget(self.tr("设置"), self.settings_widget, Direction.BOTTOM, icon_name="settings")
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if not self.local_match_widget.taskmanager.is_finished("local_match"):
@@ -148,6 +148,7 @@ class MainWindow(SidebarWindow):
         self.clear_widgets()
         self.init_widgets()
         self.set_current_widget(current_widget)
+        apply_theme(self)
 
     @Slot()
     def show_window(self) -> None:

@@ -9,6 +9,7 @@ from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import QFileDialog, QFrame, QHBoxLayout, QLabel, QLayout, QLineEdit, QPushButton, QSizePolicy, QTableWidgetItem, QVBoxLayout, QWidget
 
 from LDDC.common.data.config import cfg
+from LDDC.common.logger import logger
 from LDDC.common.models import (
     APIResultList,
     Language,
@@ -31,6 +32,7 @@ from LDDC.core.api.translate import translate_lyrics
 from LDDC.core.auto_fetch import auto_fetch
 from LDDC.core.song_info import AUDIO_FORMATS, parse_drop_infos, write_lyrics
 from LDDC.gui.components.msg_box import MsgBox
+from LDDC.gui.components.page_options import PageOptions
 from LDDC.gui.components.search_layout import refine_search_layout
 from LDDC.gui.components.theme import primary_button
 from LDDC.gui.ui.search_base_ui import Ui_search_base
@@ -98,6 +100,7 @@ class SearchWidgetBase(QWidget, Ui_search_base):
         self.translate_pushButton.clicked.connect(self.translate_lyrics)
 
         self.source_comboBox.currentIndexChanged.connect(self.update_search_types)
+        self.search_type_comboBox.currentIndexChanged.connect(self.check_return)
 
     @Slot()
     def update_search_types(self) -> None:
@@ -158,7 +161,18 @@ class SearchWidgetBase(QWidget, Ui_search_base):
         self.search_pushButton.setText(self.tr("正在搜索..."))
         self.search_pushButton.setEnabled(False)
 
-        callback, error_handling = create_collecting_callbacks(len(sources), self.add2table, MsgBox.get_error_slot(self, msg=self.tr("搜索失败")))
+        def search_callback(result: APIResultList | list[Exception]) -> None:
+            if isinstance(result, list):
+                MsgBox.error(self, result[0], msg=self.tr("搜索失败"))
+            else:
+                self.add2table(result)
+
+        callback, collect_error = create_collecting_callbacks(len(sources), search_callback)
+
+        def error_handling(error: Exception) -> None:
+            logger.warning(f"搜索源请求失败: {error}")
+            collect_error(error)
+
         self.task_manager.clear_task("table")
         # 对每个搜索源执行搜索操作
         for source in sources:
@@ -303,6 +317,9 @@ class SearchWidgetBase(QWidget, Ui_search_base):
         self.update_translate_button_state()
 
     def check_return(self) -> bool:
+        self.return_toolButton.setVisible(
+            len(self.path) > 1 or self.search_type_comboBox.currentIndex() != SearchType.SONG.value,
+        )
         if len(self.path) > 1:
             self.return_toolButton.setEnabled(True)
             return True
@@ -400,9 +417,10 @@ class SearchWidgetBase(QWidget, Ui_search_base):
             and self.task_manager.is_finished("search_more")
         ):
 
-            def _callback(result: APIResultList | Exception) -> None:
-                if isinstance(result, Exception):
-                    MsgBox.error(self, result, msg=self.tr("搜索更多结果时错误"))
+            def _callback(result: APIResultList | list[Exception]) -> None:
+                if isinstance(result, list):
+                    self.results_tableWidget.removeRow(self.results_tableWidget.rowCount() - 1)
+                    MsgBox.error(self, result[0], msg=self.tr("搜索更多结果时错误"))
                     return
 
                 if len(result) == 0:
@@ -480,8 +498,19 @@ class SearchWidgetBase(QWidget, Ui_search_base):
         self.translate_pushButton.setEnabled(True)
 
     def retranslateUi(self, _search_base: "SearchWidgetBase | None" = None) -> None:
+        options = getattr(self, "page_options", None)
+        index = self.search_type_comboBox.currentIndex()
+        state = options.collect() if options is not None else None
+        loading = options.loading if options is not None else False
+        if options is not None:
+            options.loading = True
         self.update_search_types()
         super().retranslateUi(self)
+        if 0 <= index < self.search_type_comboBox.count():
+            self.search_type_comboBox.setCurrentIndex(index)
+        if options is not None:
+            options.restore(state)
+            options.loading = loading
         self.search_keyword_lineEdit.setPlaceholderText(self.tr("输入歌名、歌手、专辑或歌单"))
         self.preview_plainTextEdit.setPlaceholderText(self.tr("双击搜索结果，在这里预览歌词。"))
         self.lyric_langs_lineEdit.setPlaceholderText("—")
@@ -503,6 +532,10 @@ class SearchWidget(SearchWidgetBase):
 
         self.task_manager.set_task("auto_fetch")
         self.task_manager.parent_childs["get_lyrics"].append("auto_fetch")
+        self.page_options = PageOptions(self, "search", (
+            "source_comboBox", "search_type_comboBox", "search_keyword_lineEdit", "save_path_lineEdit",
+            "original_checkBox", "translate_checkBox", "romanized_checkBox", "lyricsformat_comboBox", "offset_spinBox",
+        ))
 
     def setup_ui(self) -> None:
         # Keep layout changes here, outside the generated .ui Python file.
@@ -640,6 +673,7 @@ class SearchWidget(SearchWidgetBase):
             if self.auto_fetch_file_path:
                 dialog.setDirectory(str(self.auto_fetch_file_path.parent))
                 dialog.selectFile(str(self.auto_fetch_file_path.name))
+            self.page_options.remember_dialog(dialog, "song_file")
             dialog.open()
 
     @Slot()
@@ -666,6 +700,7 @@ class SearchWidget(SearchWidgetBase):
         dialog.setWindowTitle(self.tr("选择保存路径"))
         dialog.setFileMode(QFileDialog.FileMode.Directory)
         dialog.fileSelected.connect(file_selected)
+        self.page_options.remember_dialog(dialog, "save_directory")
         dialog.open()
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:

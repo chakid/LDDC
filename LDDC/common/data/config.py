@@ -42,6 +42,7 @@ class Config(dict):
             "lyrics_file_name_fmt": "%<artist> - %<title> (%<id>)",
             "default_save_path": str(default_save_lyrics_dir),
             "ID3_version": "v2.3",
+            "page_options": {},
 
             "multi_search_sources": ["QM", "KG", "NE"],
 

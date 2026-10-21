@@ -1,0 +1,54 @@
+name: Package Windows and Apple Silicon
+
+on:
+  push:
+    branches: ['codex/package-desktop-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            arch: x64
+            target: windows-x64
+          - os: macos-15
+            arch: arm64
+            target: macos-arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.arch }}
+      - name: Install build dependencies
+        run: python -m pip install -r requirements-build.txt
+      - name: Compile and package
+        run: python tools/build_package.py
+      - name: Record checksums
+        shell: python
+        run: |
+          import hashlib
+          from pathlib import Path
+          files = sorted(Path('dist').glob('*'))
+          Path('dist/SHA256SUMS.txt').write_text(''.join(f'{hashlib.file_digest(p.open("rb"), "sha256").hexdigest()}  {p.name}\n' for p in files), encoding='utf-8')
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LDDC-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-report-${{ matrix.target }}
+          path: build/*report*.xml
+          if-no-files-found: ignore

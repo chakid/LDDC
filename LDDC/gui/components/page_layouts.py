@@ -5,7 +5,9 @@
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLayout, QListView, QSizePolicy, QTextBrowser, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QGridLayout, QHBoxLayout, QLabel, QLayout, QListView, QSizePolicy, QTextBrowser, QVBoxLayout, QWidget
+
+from LDDC.gui.components.custom_widgets import RoundedTableContainer
 
 if TYPE_CHECKING:
     from LDDC.gui.view.batch_convert import BatchConvertWidget
@@ -21,6 +23,12 @@ def _row(*widgets: QWidget) -> QHBoxLayout:
 
 
 def refine_local_match(view: "LocalMatchWidget") -> None:
+    # A table's viewport and headers do not obey its stylesheet border radius.
+    # Give the frame its own widget so those children cannot cover the border.
+    results_layout = view.verticalLayout
+    table_index = results_layout.indexOf(view.songs_table)
+    results_layout.takeAt(table_index)
+    results_layout.insertWidget(table_index, RoundedTableContainer(view.songs_table))
     grid = view.gridLayout
     while grid.count():
         grid.takeAt(0)
@@ -29,9 +37,26 @@ def refine_local_match(view: "LocalMatchWidget") -> None:
     grid.setVerticalSpacing(10)
     view.control_bar.setProperty("role", "card")
     view.control_bar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-    toolbar = _row(view.select_files_button, view.select_dirs_button, view.save_path_button)
-    toolbar.addStretch(1)
-    toolbar.addWidget(view.start_cancel_pushButton)
+    selectors = QGridLayout()
+    selectors.setHorizontalSpacing(10)
+    selectors.setVerticalSpacing(8)
+    for row, (button, field) in enumerate((
+        (view.select_files_button, view.selected_files_edit),
+        (view.select_dirs_button, view.selected_dirs_edit),
+        (view.save_path_button, view.selected_save_path_edit),
+    )):
+        selectors.addWidget(button, row, 0)
+        selectors.addWidget(field, row, 1)
+    selectors.setColumnStretch(1, 1)
+    actions = QVBoxLayout()
+    actions.setSpacing(8)
+    actions.addStretch(1)
+    actions.addWidget(view.retry_failed_button)
+    actions.addWidget(view.start_cancel_pushButton)
+    toolbar = QHBoxLayout()
+    toolbar.setSpacing(16)
+    toolbar.addLayout(selectors, 1)
+    toolbar.addLayout(actions)
     for button in (view.select_files_button, view.select_dirs_button, view.save_path_button, view.start_cancel_pushButton):
         button.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     grid.addLayout(toolbar, 0, 0, 1, 4)
@@ -136,6 +161,11 @@ def refine_settings(view: "SettingWidget") -> None:
     for button in (view.clear_cache_pushButton, view.open_log_dir_button, view.restore2default_pushButton):
         actions.addWidget(button)
     misc.addLayout(actions, 3, 0, 1, 6)
+    concurrency = _row(view.local_match_concurrency_label, view.local_match_concurrency_spinBox)
+    view.local_match_concurrency_spinBox.setFixedWidth(100)
+    concurrency.addStretch(1)
+    misc.addLayout(concurrency, 4, 0, 1, 6)
+    misc.addWidget(view.local_match_concurrency_help_label, 5, 0, 1, 6)
     view.multi_search_source_list.setMaximumWidth(16777215)
     view.multi_search_source_list.setFixedHeight(44)
     view.multi_search_source_list.setFlow(QListView.Flow.LeftToRight)

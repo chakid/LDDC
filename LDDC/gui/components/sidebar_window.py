@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (C) 2024-2025 沉默の金 <cmzj@cmzj.org>
 # SPDX-License-Identifier: GPL-3.0-only
-from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtCore import QSize, Qt, Signal, Slot
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -43,7 +43,7 @@ class SidebarWindow(QMainWindow):
         self.Widgets = QTabWidget(self)
         self.horizontalLayout.addWidget(self.sidebar_widget)
         self.horizontalLayout.addWidget(self.Widgets)
-        self.sidebar.setContentsMargins(12, 24, 12, 20)
+        self.sidebar.setContentsMargins(8, 16, 8, 16)
         self.sidebar.setSpacing(8)
         self.Widgets.tabBar().hide()
 
@@ -70,9 +70,11 @@ class SidebarWindow(QMainWindow):
         self.set_current_widget(index)
 
     def set_sidebar_width(self, width: int) -> None:
+        self.sidebar_widget.setProperty("preferredWidth", width)
         self.sidebar_widget.setFixedWidth(width)
 
-    def add_widget(self, name: str, widget: QWidget, position: Direction = Direction.TOP, icon: None | QIcon = None) -> None:
+    def add_widget(self, name: str, widget: QWidget, position: Direction = Direction.TOP,
+                   icon: None | QIcon = None, icon_name: str | None = None) -> None:
         """添加一个新页面到侧边栏中
 
         :param name: 页面的名称
@@ -82,6 +84,9 @@ class SidebarWindow(QMainWindow):
         """
         button = QPushButton(name, self.sidebar_widget)
         button.setProperty("role", "nav")
+        button.setProperty("navIcon", icon_name)
+        button.setIconSize(QSize(18, 18))
+        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         if isinstance(icon, QIcon):

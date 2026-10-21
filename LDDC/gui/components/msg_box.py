@@ -10,6 +10,8 @@ from PySide6.QtCore import QCoreApplication, QObject, Qt, Slot
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QAbstractButton, QMessageBox, QWidget
 
+from LDDC.gui.components.message_dialog import MessageDialog
+
 _msg_boxs: list[tuple[QMessageBox, QWidget | None, Callable | None]] = []
 
 
@@ -19,11 +21,11 @@ def button_clicked(button: QAbstractButton) -> None:
 
     :param button: 按钮
     """
-    msg_box = button.parent().parent()
+    msg_box = button.window()
     if not isinstance(msg_box, QMessageBox):
         return
 
-    for index, (box, parent, func) in enumerate(_msg_boxs):  # noqa: B007
+    for box, parent, func in _msg_boxs:
         if box == msg_box:
             break
     else:
@@ -34,16 +36,21 @@ def button_clicked(button: QAbstractButton) -> None:
         with contextlib.suppress(Exception):
             func(msg_box.standardButton(button))
 
-    msg_box.destroy()
-    msg_box.deleteLater()
-    _msg_boxs.pop(index)
+
+def _release_msg_box(msg: QMessageBox) -> None:
+    """Release boxes on every exit path, including Escape and the close button."""
+    for index, (box, _, _) in enumerate(_msg_boxs):
+        if box is msg:
+            _msg_boxs.pop(index)
+            break
+    msg.deleteLater()
 
 
 class MsgBox(QObject):
     @staticmethod
     def init_msg_box(parent: QWidget | None, title: str, text: str) -> QMessageBox:
         """初始化消息框"""
-        msg = QMessageBox(parent)
+        msg = MessageDialog(parent)
         msg.setWindowIcon(QIcon(":/LDDC/img/icon/logo.png"))
         if parent is not None:
             msg.setWindowModality(Qt.WindowModality.WindowModal)
@@ -54,6 +61,7 @@ class MsgBox(QObject):
         msg.setStandardButtons(QMessageBox.StandardButton.Ok)
         msg.setDefaultButton(QMessageBox.StandardButton.Ok)
         msg.buttonClicked.connect(button_clicked)
+        msg.finished.connect(lambda _: _release_msg_box(msg))
         return msg
 
     @staticmethod
@@ -66,8 +74,8 @@ class MsgBox(QObject):
         """
         msg = MsgBox.init_msg_box(parent, title, text)
         msg.setIcon(QMessageBox.Icon.Information)
-        msg.show()
         _msg_boxs.append((msg, parent, None))
+        msg.show()
 
     @staticmethod
     def warning(parent: QWidget | None, title: str, text: str) -> None:
@@ -79,8 +87,8 @@ class MsgBox(QObject):
         """
         msg = MsgBox.init_msg_box(parent, title, text)
         msg.setIcon(QMessageBox.Icon.Warning)
-        msg.show()
         _msg_boxs.append((msg, parent, None))
+        msg.show()
 
     @staticmethod
     def critical(parent: QWidget | None, title: str, text: str) -> None:
@@ -92,8 +100,8 @@ class MsgBox(QObject):
         """
         msg = MsgBox.init_msg_box(parent, title, text)
         msg.setIcon(QMessageBox.Icon.Critical)
-        msg.show()
         _msg_boxs.append((msg, parent, None))
+        msg.show()
 
     @staticmethod
     def error(parent: QWidget | None, e: Exception | Iterable[Exception], title: str | None = None, msg: str = "") -> None:
@@ -139,15 +147,9 @@ class MsgBox(QObject):
         :param button1: 默认按键
         :param func: 按键回调函数,调用时会按键类型
         """
-        msg = QMessageBox(parent)
-        msg.setWindowIcon(QIcon(":/LDDC/img/icon/logo.png"))
-        if parent is not None:
-            msg.setWindowModality(Qt.WindowModality.WindowModal)
+        msg = MsgBox.init_msg_box(parent, title, text)
         msg.setIcon(QMessageBox.Icon.Question)
-        msg.setWindowTitle(title)
-        msg.setText(text)
         msg.setStandardButtons(button0)
         msg.setDefaultButton(button1)
-        msg.buttonClicked.connect(button_clicked)
-        msg.show()
         _msg_boxs.append((msg, parent, func))
+        msg.show()

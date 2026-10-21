@@ -191,6 +191,8 @@ class LocalMatchWorker(TaskWorker):
         min_score: int,
         sources: list[Source],
         skip_existing_lyrics: bool,
+        *,
+        refresh: bool = False,
     ) -> None:
         """本地匹配歌词
 
@@ -224,6 +226,7 @@ class LocalMatchWorker(TaskWorker):
         self.min_score = min_score
         self.sources = sources
         self.skip_existing_lyrics = skip_existing_lyrics
+        self.refresh = refresh
 
         self.skip_inst_lyrics = cfg["skip_inst_lyrics"]
         self.file_name_format = cfg["lyrics_file_name_fmt"]
@@ -262,7 +265,7 @@ class LocalMatchWorker(TaskWorker):
 
             if self.is_stopped:
                 return None
-            lyrics = auto_fetch(info=info, min_score=self.min_score, sources=self.sources)
+            lyrics = auto_fetch(info=info, min_score=self.min_score, sources=self.sources, use_cache=not self.refresh)
             if self.is_stopped:
                 return None
 
@@ -362,5 +365,4 @@ class LocalMatchWorker(TaskWorker):
         finally:
             pool.waitForDone()
 
-        self.progress.emit("", 0, 0, None)
         self.finished.emit(completed, success_count, completed - success_count - skip_count, skip_count)

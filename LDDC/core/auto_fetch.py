@@ -11,7 +11,7 @@ from LDDC.common.logger import logger
 from LDDC.common.models import APIResultList, Language, LyricInfo, Lyrics, LyricsType, SearchInfo, SearchType, SongInfo, Source
 from LDDC.common.task_manager import TaskManager
 from LDDC.core.algorithm import calculate_artist_score, calculate_title_score, text_difference
-from LDDC.core.api.lyrics import get_lyrics, search
+from LDDC.core.api.lyrics import get_lyrics, lyrics_api, search
 
 
 @overload
@@ -20,6 +20,8 @@ def auto_fetch(
     min_score: float = 60,
     sources: Iterable[Source] = (Source.QM, Source.KG, Source.NE),
     return_search_results: bool = False,
+    *,
+    use_cache: bool = True,
 ) -> Lyrics: ...
 
 
@@ -29,6 +31,8 @@ def auto_fetch(
     min_score: float = 60,
     sources: Iterable[Source] = (Source.QM, Source.KG, Source.NE),
     return_search_results: bool = True,
+    *,
+    use_cache: bool = True,
 ) -> tuple[Lyrics, APIResultList[SongInfo]]: ...
 
 
@@ -37,6 +41,8 @@ def auto_fetch(
     min_score: float = 55,
     sources: Iterable[Source] = (Source.QM, Source.KG, Source.NE),
     return_search_results: bool = False,
+    *,
+    use_cache: bool = True,
 ) -> Lyrics | tuple[Lyrics, APIResultList[SongInfo]]:
     keywords: dict[Literal["artist-title", "title", "file_name"], str] = {}
     if info.title and info.title.strip():
@@ -129,7 +135,7 @@ def auto_fetch(
 
                 taskmanger.new_multithreaded_task(
                     "get_lyrics",
-                    get_lyrics,
+                    get_lyrics if use_cache else lyrics_api.get_lyrics,
                     lambda lyrics: lyrics_results.__setitem__(result_score[index][1], lyrics),
                     lambda e: _get_lyrics(index + 1)
                     if isinstance(e, LyricsNotFoundError) and 0 <= index < 2 and len(result_score) > 1 + index  # 最多尝试获取两个结果
@@ -145,7 +151,7 @@ def auto_fetch(
         for source in sources if isinstance(sources, Iterable) else (sources,):
             taskmanger.new_multithreaded_task(
                 "search",
-                search,
+                search if use_cache else lyrics_api.search,
                 search_callback,
                 lambda e: errors.append(e),
                 source,

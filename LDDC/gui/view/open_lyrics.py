@@ -18,6 +18,7 @@ from LDDC.core.parser.krc import KRC_MAGICHEADER
 from LDDC.core.parser.qrc import QRC_MAGICHEADER
 from LDDC.core.song_info import AUDIO_FORMATS, read_lyrics, write_lyrics
 from LDDC.gui.components.msg_box import MsgBox
+from LDDC.gui.components.page_options import PageOptions
 from LDDC.gui.ui.open_lyrics_ui import Ui_open_lyrics
 
 
@@ -37,6 +38,9 @@ class OpenLyricsWidget(QWidget, Ui_open_lyrics):
                 "translate": [],
             },
         )
+        self.page_options = PageOptions(self, "open_lyrics", (
+            "original_checkBox", "translate_checkBox", "romanized_checkBox", "lyricsformat_comboBox", "offset_spinBox",
+        ))
 
     def connect_signals(self) -> None:
         self.open_pushButton.clicked.connect(self.select_file)
@@ -131,6 +135,7 @@ class OpenLyricsWidget(QWidget, Ui_open_lyrics):
         dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
         dialog.setNameFilter(self.tr("歌词/歌曲文件") + "(*.qrc *.krc *.lrc *.ass *.srt *." + " *.".join(AUDIO_FORMATS) + ")")
         dialog.fileSelected.connect(self.open_file)
+        self.page_options.remember_dialog(dialog, "input_file")
         dialog.open()
 
     @Slot()
@@ -198,6 +203,7 @@ class OpenLyricsWidget(QWidget, Ui_open_lyrics):
         else:
             dialog.setNameFilter(self.tr("全部文件") + "(*)")
         dialog.fileSelected.connect(file_selected)
+        self.page_options.remember_dialog(dialog, "output_file")
         dialog.open()
 
     @Slot()
@@ -229,6 +235,7 @@ class OpenLyricsWidget(QWidget, Ui_open_lyrics):
         if self.lyrics_type == "audio" and self.path:
             dialog.setDirectory(str(self.path.parent))
             dialog.selectFile(str(self.path.name))
+        self.page_options.remember_dialog(dialog, "song_file")
         dialog.open()
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:

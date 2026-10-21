@@ -55,6 +55,7 @@ jobs:
               run: |
                 pip install -Ur requirements.txt
                 pip install imageio
+                pip install Nuitka
             
             - name: Install EGL/upx
               if: ${{ runner.os == 'Linux' }}
@@ -309,6 +310,7 @@ jobs:
                 name: ${{ runner.os }} - ${{ matrix.arch }} artifacts
                 path: |
                     upload/
+
     build-wheel:
       name: Build wheel
       runs-on: ubuntu-latest
