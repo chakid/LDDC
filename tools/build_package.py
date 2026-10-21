@@ -87,6 +87,8 @@ def main() -> int:
             "LDDC",
         ]))
         output = DIST / f"LDDC-windows-{arch}"
+        run(str(BUILD / "LDDC.dist" / "LDDC.exe"), "--help")
+        shutil.copy2(ROOT / "LICENSE", BUILD / "LDDC.dist" / "LICENSE.txt")
         shutil.copy2(BUILD / "LDDC.exe", output.with_suffix(".exe"))
         shutil.make_archive(str(output), "zip", BUILD / "LDDC.dist")
         print(f"Created {output}.zip")
@@ -94,6 +96,8 @@ def main() -> int:
 
     run(*(nuitka + common + [
         "--mode=app",
+        "--output-filename=LDDC.bin",
+        "--macos-app-name=LDDC",
         "--macos-app-icon=LDDC/res/img/icon/logo.icns",
         "--macos-target-arch=arm64",
         "--macos-app-version=" + ".".join(str(part) for part in parse_version(__version__)[:3]),
@@ -102,11 +106,14 @@ def main() -> int:
     app = BUILD / "LDDC.app"
     if not app.exists():
         raise SystemExit(f"Nuitka did not create the expected app bundle: {app}")
+    run(str(app / "Contents" / "MacOS" / "LDDC.bin"), "--help")
+    run("file", str(app / "Contents" / "MacOS" / "LDDC.bin"))
     dmg = DIST / "LDDC-macos-arm64.dmg"
     if shutil.which("hdiutil"):
         staging = BUILD / "dmg-staging"
         staging.mkdir(exist_ok=True)
         run("ditto", str(app), str(staging / app.name))
+        shutil.copy2(ROOT / "LICENSE", staging / "LICENSE.txt")
         applications = staging / "Applications"
         if not applications.is_symlink():
             applications.symlink_to("/Applications", target_is_directory=True)
